@@ -28,11 +28,15 @@ func NewHandler(requestUseCase request.UseCase, proxyManager *proxy.ProxyManager
 }
 
 func (h *RequestHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
+	h.proxyHttpOrHttps(w, r, true)
+}
+
+func (h *RequestHandler) proxyHttpOrHttps(w http.ResponseWriter, r *http.Request, save bool) {
 	var err error
 	if r.Method == http.MethodConnect {
-		err = h.proxyManager.ProxyHttpsRequest(w, r)
+		err = h.proxyManager.ProxyHttpsRequest(w, r, save)
 	} else {
-		err = h.proxyManager.ProxyHttpRequest(w, r)
+		err = h.proxyManager.ProxyHttpRequest(w, r, save)
 	}
 
 	if err != nil {
@@ -82,7 +86,7 @@ func (h *RequestHandler) RepeatRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	h.ProxyRequest(w, &http.Request{
+	h.proxyHttpOrHttps(w, &http.Request{
 		Method: selectedRequest.Method,
 		URL: &url.URL{
 			Scheme: selectedRequest.Scheme,
@@ -92,7 +96,7 @@ func (h *RequestHandler) RepeatRequest(w http.ResponseWriter, r *http.Request) {
 		Header: selectedRequest.Headers,
 		Body:   ioutil.NopCloser(strings.NewReader(selectedRequest.Body)),
 		Host:   r.Host,
-	})
+	}, false)
 }
 
 func (h *RequestHandler) ScanRequest(w http.ResponseWriter, r *http.Request) {
