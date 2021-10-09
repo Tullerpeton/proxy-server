@@ -9,6 +9,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"github.com/proxy-server/internal/pkg/models"
+	"github.com/proxy-server/pkg/request_utils"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -23,7 +25,7 @@ import (
 	"time"
 )
 
-func (p *ProxyManager) ProxyHttpsRequest(w http.ResponseWriter, r *http.Request) error {
+func (p *ProxyManager) ProxyHttpsRequest(w http.ResponseWriter, r *http.Request, save bool) error {
 	requestUrl, _ := url.Parse(r.RequestURI)
 	var scheme string
 	if requestUrl.Scheme == "" {
@@ -58,13 +60,26 @@ func (p *ProxyManager) ProxyHttpsRequest(w http.ResponseWriter, r *http.Request)
 		return err
 	}
 
+	var request *models.Request
+	if save {
+		request, err = request_utils.ParseRequest(tcpClientRequest, "https")
+		if err != nil {
+			return err
+		}
+
+		err = p.proxyRepository.InsertRequest(request)
+		if err != nil {
+			return err
+		}
+	}
+
 	tcpServerConn, err := p.initTcpServer(r.Host, scheme)
 	if err != nil {
 		return err
 	}
 	defer tcpServerConn.Close()
 
-	if err = p.makeHttpsRequest(tcpClientConn, tcpServerConn, tcpClientRequest); err != nil {
+	if err = p.makeHttpsRequest(tcpClientConn, tcpServerConn, tcpClientRequest, request.Id, save); err != nil {
 		return err
 	}
 
@@ -192,7 +207,8 @@ func (p *ProxyManager) generateCertificate(scheme string) (tls.Certificate, erro
 	return cert, nil
 }
 
-func (p *ProxyManager) makeHttpsRequest(tcpClientConn, tcpServerConn *tls.Conn, request *http.Request) error {
+func (p *ProxyManager) makeHttpsRequest(tcpClientConn, tcpServerConn *tls.Conn, request *http.Request,
+	requestId int64, save bool) error {
 	if err := request.Write(tcpServerConn); err != nil {
 		return err
 	}
@@ -206,6 +222,19 @@ func (p *ProxyManager) makeHttpsRequest(tcpClientConn, tcpServerConn *tls.Conn, 
 	rawResp, err := httputil.DumpResponse(tcpServerResponse, true)
 	if _, err = tcpClientConn.Write(rawResp); err != nil {
 		return err
+	}
+
+	var response *models.Response
+	if save {
+		response, err = request_utils.ParseResponse(tcpServerResponse, requestId)
+		if err != nil {
+			return err
+		}
+
+		err = p.proxyRepository.InsertResponse(response)
+		if err != nil {
+			return err
+		}
 	}
 
 	go func(destination, source *tls.Conn) {

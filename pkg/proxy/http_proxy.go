@@ -4,17 +4,22 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/proxy-server/internal/pkg/models"
 	"github.com/proxy-server/pkg/request_utils"
 )
 
-func (p *ProxyManager) ProxyHttpRequest(w http.ResponseWriter, r *http.Request) error {
-	request, err := request_utils.ParseRequest(r, "http")
-	if err != nil {
-		return err
-	}
+func (p *ProxyManager) ProxyHttpRequest(w http.ResponseWriter, r *http.Request, save bool) error {
+	var request *models.Request
+	var err error
+	if save {
+		request, err = request_utils.ParseRequest(r, "http")
+		if err != nil {
+			return err
+		}
 
-	if err = p.proxyRepository.InsertRequest(request); err != nil {
-		return err
+		if err = p.proxyRepository.InsertRequest(request); err != nil {
+			return err
+		}
 	}
 
 	proxyRequest, err := p.createProxyHttpRequest(r)
@@ -28,16 +33,19 @@ func (p *ProxyManager) ProxyHttpRequest(w http.ResponseWriter, r *http.Request) 
 	}
 	defer proxyResponse.Body.Close()
 
+	var response *models.Response
+	if save {
+		response, err = request_utils.ParseResponse(proxyResponse, request.Id)
+		if err != nil {
+			return err
+		}
+
+		if err = p.proxyRepository.InsertResponse(response); err != nil {
+			return err
+		}
+	}
+
 	if err = p.saveProxyHttpResponse(w, proxyResponse); err != nil {
-		return err
-	}
-
-	response, err := request_utils.ParseResponse(proxyResponse, request.Id)
-	if err != nil {
-		return err
-	}
-
-	if err = p.proxyRepository.InsertResponse(response); err != nil {
 		return err
 	}
 

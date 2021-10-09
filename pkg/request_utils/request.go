@@ -1,6 +1,7 @@
 package request_utils
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 	"io/ioutil"
@@ -52,6 +53,7 @@ func ParseResponse(rp *http.Response, requestId int64) (*models.Response, error)
 	if err != nil {
 		return nil, err
 	}
+	rp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	response := &models.Response{
 		RequestId: requestId,
