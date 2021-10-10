@@ -10,17 +10,17 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install postgresql-12 -y
+RUN apt-get update && apt-get -y install postgresql postgresql-contrib ca-certificates
 
 USER postgres
 
-COPY ./scripts/sql/init_db.sql .
+COPY /scripts /opt/scripts
 
 RUN service postgresql start && \
         psql -c "CREATE USER proxy_user WITH superuser login password 'proxy_user';" && \
         psql -c "ALTER ROLE proxy_user WITH PASSWORD 'proxy_user';" && \
         createdb -O proxy_user proxy_db && \
-        psql -f init_db.sql -d proxy_db && \
+        psql -f ./opt/scripts/sql/init_db.sql -d proxy_db && \
         service postgresql stop
 
 VOLUME ["/etc/postgresql", "/var/log/postgresql", "/var/lib/postgresql"]
@@ -40,5 +40,14 @@ ENV PROXY_PORT=8080
 ENV REPEATER_PORT=8000
 ENV DB_USER=user
 ENV DB_NAME=Requests
+
+RUN ["chmod", "+x", "/opt/scripts/bash/generate_ca.sh"]
+RUN ["chmod", "+x", "/opt/scripts/bash/install_ca.sh"]
+
+RUN /bin/bash -c "/opt/scripts/bash/generate_ca.sh" && \
+    /bin/bash -c "/opt/scripts/bash/install_ca.sh"
+
+#ENTRYPOINT ["sh", "/opt/scripts/bash/generate_ca.sh"]
+#ENTRYPOINT ["sh", "/opt/scripts/bash/install_ca.sh"]
 
 CMD service postgresql start && ./main
